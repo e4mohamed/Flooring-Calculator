@@ -54,6 +54,18 @@
     background:none; border:none; color:var(--brand-dark); font-size:11.5px; font-weight:700;
     text-decoration:underline; cursor:pointer; padding:0; margin-inline-start:10px;
   }
+  .row-delete{
+    background:none; border:none; color:#b3261e; font-size:16px; cursor:pointer;
+    padding:2px 6px; border-radius:6px; line-height:1;
+  }
+  .row-delete:hover{background:#fde8e6;}
+  .comp-add-line{display:flex; align-items:center; gap:5px; font-size:11px; margin-top:4px;}
+  .comp-add-line select{
+    font-family:'Cairo',sans-serif; font-size:11px; padding:2px 4px; border:1px solid #cdd9de; border-radius:5px;
+  }
+  .comp-remove{
+    background:none; border:none; color:#b3261e; font-size:13px; cursor:pointer; padding:0 2px; line-height:1;
+  }
 </style>
 </head>
 <body>
@@ -93,20 +105,26 @@
     <h2>المنتجات الأساسية (Raw Products) <span class="tag">قابلة للتعديل بالكامل</span></h2>
     <table class="prod-table">
       <thead>
-        <tr><th>اسم الصنف</th><th>الفئة</th><th>سعر الكيلو (جنيه)</th><th>معدل التغطية (م²/كجم)</th></tr>
+        <tr><th>اسم الصنف</th><th>الفئة</th><th>سعر الكيلو (جنيه)</th><th>معدل التغطية (م²/كجم)</th><th></th></tr>
       </thead>
       <tbody id="rawBody"></tbody>
     </table>
+    <div class="admin-actions">
+      <button class="btn secondary" id="addRawBtn">+ إضافة منتج جديد</button>
+    </div>
   </div>
 
   <div class="panel">
     <h2>الخلطات (Mixtures) <span class="tag">السعر يُحسب تلقائيًا من المكونات</span></h2>
     <table class="prod-table">
       <thead>
-        <tr><th>اسم الخلطة</th><th>الفئة + المكونات (نسب الخلط)</th><th>السعر المحسوب (جنيه)</th><th>معدل التغطية (م²/كجم)</th></tr>
+        <tr><th>اسم الخلطة</th><th>الفئة + المكونات (نسب الخلط)</th><th>السعر المحسوب (جنيه)</th><th>معدل التغطية (م²/كجم)</th><th></th></tr>
       </thead>
       <tbody id="mixBody"></tbody>
     </table>
+    <div class="admin-actions">
+      <button class="btn secondary" id="addMixBtn">+ إضافة خلطة جديدة</button>
+    </div>
   </div>
 
   <div class="panel">
@@ -117,6 +135,9 @@
       </thead>
       <tbody id="auxBody"></tbody>
     </table>
+    <div class="admin-actions">
+      <button class="btn secondary" id="addAuxBtn">+ إضافة مادة مساعدة جديدة</button>
+    </div>
   </div>
 
   <div class="panel">
@@ -153,6 +174,20 @@ const auxBody = document.getElementById("auxBody");
 
 function fmt(n){ return (Math.round(n*100)/100).toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2}); }
 
+// build a unique, safe key from a display name (uppercase, alnum only)
+function makeUniqueKey(name){
+  const base = (name || "ITEM").toUpperCase().replace(/[^A-Z0-9\u0600-\u06FF]/g, "").slice(0, 20) || "ITEM";
+  const allKeys = new Set([...rawProducts, ...auxMaterials, ...mixtures].map(x=>x.key));
+  let key = base, n = 1;
+  while(allKeys.has(key)){ n++; key = base + n; }
+  return key;
+}
+
+function ingredientCandidates(){
+  // composition ingredients can be raw products or aux materials (not other mixtures)
+  return [...rawProducts, ...auxMaterials];
+}
+
 function renderRaw(){
   rawBody.innerHTML = "";
   rawProducts.forEach(p=>{
@@ -161,13 +196,20 @@ function renderRaw(){
       <td><input type="text" value="${p.name}" data-field="name"></td>
       <td><input type="text" value="${p.cat}" data-field="cat"></td>
       <td><input type="number" step="0.01" value="${p.price}" data-field="price" class="price-input"></td>
-      <td><input type="number" step="0.01" value="${p.coverage}" data-field="coverage" class="coverage-edit"></td>`;
+      <td><input type="number" step="0.01" value="${p.coverage}" data-field="coverage" class="coverage-edit"></td>
+      <td><button class="row-delete" title="حذف">✕</button></td>`;
     tr.querySelectorAll("input").forEach(inp=>{
       inp.addEventListener("input", e=>{
         const field = e.target.dataset.field;
         p[field] = (field==="price"||field==="coverage") ? (parseFloat(e.target.value)||0) : e.target.value;
         renderMixtures(); // mixture prices may depend on raw product prices
       });
+    });
+    tr.querySelector(".row-delete").addEventListener("click", ()=>{
+      if(!confirm(`حذف "${p.name}"؟ (لن يُحفظ إلا بعد الضغط على زر الحفظ)`)) return;
+      const idx = rawProducts.indexOf(p);
+      rawProducts.splice(idx, 1);
+      renderAll();
     });
     rawBody.appendChild(tr);
   });
@@ -181,13 +223,19 @@ function renderAux(){
       <td><input type="text" value="${a.name}" data-field="name"></td>
       <td style="color:var(--ink-soft); font-size:11px;">مادة مساعدة (غير مطروحة كخيار مباشر)</td>
       <td><input type="number" step="0.01" value="${a.price}" data-field="price" class="price-input"></td>
-      <td>—</td>`;
+      <td><button class="row-delete" title="حذف">✕</button></td>`;
     tr.querySelectorAll("input").forEach(inp=>{
       inp.addEventListener("input", e=>{
         const field = e.target.dataset.field;
         a[field] = field==="price" ? (parseFloat(e.target.value)||0) : e.target.value;
         renderMixtures(); // mixtures may use aux materials in composition
       });
+    });
+    tr.querySelector(".row-delete").addEventListener("click", ()=>{
+      if(!confirm(`حذف "${a.name}"؟ (لن يُحفظ إلا بعد الضغط على زر الحفظ)`)) return;
+      const idx = auxMaterials.indexOf(a);
+      auxMaterials.splice(idx, 1);
+      renderAll();
     });
     auxBody.appendChild(tr);
   });
@@ -203,15 +251,26 @@ function renderMixtures(){
         <span>${getName(c.key)}</span>
         <input type="number" step="0.1" value="${c.ratio}" data-mix="${m.key}" data-ci="${ci}" class="ratio-edit-input">
         <span>جزء</span>
+        <button class="comp-remove" data-mix="${m.key}" data-ci="${ci}" title="إزالة المكوّن">✕</button>
       </div>`).join("");
+    const candidateOptions = ingredientCandidates()
+      .filter(ing=>!m.composition.some(c=>c.key===ing.key))
+      .map(ing=>`<option value="${ing.key}">${ing.name}</option>`).join("");
     tr.innerHTML = `
       <td><input type="text" value="${m.name}" data-field="name" data-mix="${m.key}" class="mix-name-input"></td>
       <td>
         <input type="text" value="${m.cat}" data-field="cat" data-mix="${m.key}" class="mix-cat-input" style="margin-bottom:4px;">
         ${compLines}
+        <div class="comp-add-line">
+          <select class="comp-add-select" data-mix="${m.key}">
+            <option value="">-- إضافة مكوّن --</option>
+            ${candidateOptions}
+          </select>
+        </div>
       </td>
       <td class="mix-price">${fmt(computeMixPrice(m))}</td>
-      <td><input type="number" step="0.01" value="${m.coverage}" data-field="coverage" data-mix="${m.key}" class="coverage-edit mix-coverage-input"></td>`;
+      <td><input type="number" step="0.01" value="${m.coverage}" data-field="coverage" data-mix="${m.key}" class="coverage-edit mix-coverage-input"></td>
+      <td><button class="row-delete" data-mix="${m.key}" title="حذف">✕</button></td>`;
     mixBody.appendChild(tr);
   });
 
@@ -230,6 +289,32 @@ function renderMixtures(){
       renderMixtures();
     });
   });
+  mixBody.querySelectorAll(".comp-remove").forEach(btn=>{
+    btn.addEventListener("click", e=>{
+      const mix = mixtures.find(m=>m.key===e.target.dataset.mix);
+      const ci = parseInt(e.target.dataset.ci, 10);
+      mix.composition.splice(ci, 1);
+      renderMixtures();
+    });
+  });
+  mixBody.querySelectorAll(".comp-add-select").forEach(sel=>{
+    sel.addEventListener("change", e=>{
+      const key = e.target.value;
+      if(!key) return;
+      const mix = mixtures.find(m=>m.key===e.target.dataset.mix);
+      mix.composition.push({key, ratio:1});
+      renderMixtures();
+    });
+  });
+  mixBody.querySelectorAll(".row-delete").forEach(btn=>{
+    btn.addEventListener("click", e=>{
+      const mix = mixtures.find(m=>m.key===e.target.dataset.mix);
+      if(!confirm(`حذف الخلطة "${mix.name}"؟ (لن يُحفظ إلا بعد الضغط على زر الحفظ)`)) return;
+      const idx = mixtures.indexOf(mix);
+      mixtures.splice(idx, 1);
+      renderMixtures();
+    });
+  });
 }
 
 function renderAll(){
@@ -237,6 +322,24 @@ function renderAll(){
   renderAux();
   renderMixtures();
 }
+
+document.getElementById("addRawBtn").addEventListener("click", ()=>{
+  const name = "منتج جديد";
+  rawProducts.push({key:makeUniqueKey(name), name, cat:"", price:0, coverage:0});
+  renderAll();
+});
+
+document.getElementById("addAuxBtn").addEventListener("click", ()=>{
+  const name = "مادة جديدة";
+  auxMaterials.push({key:makeUniqueKey(name), name, price:0});
+  renderAll();
+});
+
+document.getElementById("addMixBtn").addEventListener("click", ()=>{
+  const name = "خلطة جديدة";
+  mixtures.push({key:makeUniqueKey(name), name, cat:"", coverage:0, composition:[]});
+  renderAll();
+});
 
 function flash(msg){
   const el = document.getElementById("saveFlash");
