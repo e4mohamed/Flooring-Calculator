@@ -49,9 +49,20 @@
   table.inventory tbody tr:hover{background:#fbfdfe;}
   table.inventory tr.group-row td{
     background:var(--brand-bg); color:var(--brand); font-weight:800; font-size:13.5px;
-    border-bottom:1.5px solid var(--brand); padding-top:10px; padding-bottom:8px;
+    border-bottom:1.5px solid var(--brand);
   }
-  table.inventory tr.group-row + tr td{padding-top:9px;}
+  table.inventory tr.group-row .price-cell,
+  table.inventory tr.group-row .qty-cell,
+  table.inventory tr.group-row .row-total{
+    color:var(--brand); font-weight:800;
+  }
+  .toggle-icon{
+    display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px;
+    border:1.5px solid var(--brand); border-radius:5px; color:var(--brand); font-weight:800;
+    font-size:13px; cursor:pointer; margin-inline-end:6px; user-select:none; background:#fff;
+  }
+  .toggle-icon:hover{background:var(--brand); color:#fff;}
+  tr.detail-row td:first-child{padding-inline-start:26px; color:var(--ink-soft);}
   table.inventory span[contenteditable]{display:inline-block; min-width:20px;}
   table.inventory span[contenteditable]:focus{outline:1.5px dashed var(--brand); border-radius:3px; background:#fff;}
   a.cut{
@@ -117,6 +128,10 @@
         <div class="field">
           <label for="projectAddress">العنوان</label>
           <input type="text" id="projectAddress" placeholder="عنوان المشروع / الموقع">
+        </div>
+        <div class="field">
+          <label for="responsiblePerson">اسم الشخص المسؤول</label>
+          <input type="text" id="responsiblePerson" placeholder="اسم المهندس المسؤول">
         </div>
         <div class="field">
           <label for="phoneNumber">رقم التليفون</label>
@@ -185,25 +200,49 @@
 <script>
 (function(){
   const invBody = document.getElementById("invBody");
+  let groupCounter = 0;
 
   function fmt(n){
     return (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
   }
 
   function recalcRow(tr){
-    if(tr.classList.contains("group-row")) return;
     const price = parseFloat(tr.querySelector(".price-cell").textContent) || 0;
     const qty = parseFloat(tr.querySelector(".qty-cell").textContent) || 0;
     tr.querySelector(".row-total").textContent = fmt(price * qty);
   }
 
+  // group summary rows are computed live from their own detail rows,
+  // so editing a detail row always keeps its system's totals correct
   function recalcAll(){
     let subtotal = 0;
+    let currentGroupRow = null;
+    let groupQty = 0, groupTotal = 0;
+
+    function flushGroup(){
+      if(!currentGroupRow) return;
+      const price = groupQty ? groupTotal/groupQty : 0;
+      currentGroupRow.querySelector(".price-cell").textContent = fmt(price);
+      currentGroupRow.querySelector(".qty-cell").textContent = fmt(groupQty);
+      currentGroupRow.querySelector(".row-total").textContent = fmt(groupTotal);
+    }
+
     invBody.querySelectorAll("tr").forEach(tr=>{
-      if(tr.classList.contains("group-row")) return;
-      recalcRow(tr);
-      subtotal += parseFloat(tr.querySelector(".row-total").textContent) || 0;
+      if(tr.classList.contains("group-row")){
+        flushGroup();
+        currentGroupRow = tr;
+        groupQty = 0; groupTotal = 0;
+      } else {
+        recalcRow(tr);
+        const rowTotal = parseFloat(tr.querySelector(".row-total").textContent) || 0;
+        const rowQty = parseFloat(tr.querySelector(".qty-cell").textContent) || 0;
+        subtotal += rowTotal;
+        groupQty += rowQty;
+        groupTotal += rowTotal;
+      }
     });
+    flushGroup();
+
     document.getElementById("subtotal").textContent = fmt(subtotal);
   }
 
@@ -224,12 +263,24 @@
     return tr;
   }
 
+  // group summary row: price/qty/total are computed live (not editable directly)
   function newGroupRow(title){
+    groupCounter++;
+    const groupId = "g" + groupCounter;
     const tr = document.createElement("tr");
     tr.className = "group-row";
-    tr.innerHTML = `<td colspan="4"><a class="cut" title="حذف النظام بالكامل">-</a><span contenteditable="true">${title || "نظام"}</span></td>`;
+    tr.dataset.groupId = groupId;
+    tr.innerHTML = `
+      <td>
+        <a class="cut" title="حذف النظام بالكامل">-</a>
+        <span class="toggle-icon" title="عرض / إخفاء تفاصيل النظام">+</span>
+        <span contenteditable="true">${title || "نظام"}</span>
+      </td>
+      <td><span class="curval" data-prefix="">${currentPrefix()}</span> <span class="price-cell">0.00</span></td>
+      <td><span class="qty-cell">0.00</span></td>
+      <td><span class="curval" data-prefix="">${currentPrefix()}</span> <span class="row-total">0.00</span></td>`;
     invBody.appendChild(tr);
-    return tr;
+    return { tr, groupId };
   }
 
   document.getElementById("addRowBtn").addEventListener("click", ()=>{
@@ -238,10 +289,27 @@
   });
 
   invBody.addEventListener("click", e=>{
+    const toggle = e.target.closest(".toggle-icon");
+    if(toggle){
+      const groupRow = toggle.closest("tr");
+      const groupId = groupRow.dataset.groupId;
+      const expanded = groupRow.classList.toggle("expanded");
+      toggle.textContent = expanded ? "−" : "+";
+      invBody.querySelectorAll(`tr.detail-row[data-group-id="${groupId}"]`).forEach(tr=>{
+        tr.style.display = expanded ? "" : "none";
+      });
+      return;
+    }
     if(e.target.classList.contains("cut")){
       const rows = invBody.querySelectorAll("tr");
       if(rows.length <= 1) return; // keep at least one row
-      e.target.closest("tr").remove();
+      const tr = e.target.closest("tr");
+      if(tr.classList.contains("group-row")){
+        // remove the whole system: its header + all of its detail rows
+        const groupId = tr.dataset.groupId;
+        invBody.querySelectorAll(`tr.detail-row[data-group-id="${groupId}"]`).forEach(r=>r.remove());
+      }
+      tr.remove();
       recalcAll();
     }
   });
@@ -283,15 +351,23 @@
 
     if(data.projectName) document.getElementById("projectName").value = data.projectName;
     if(data.projectAddress) document.getElementById("projectAddress").value = data.projectAddress;
+    if(data.responsiblePerson) document.getElementById("responsiblePerson").value = data.responsiblePerson;
     if(data.phoneNumber) document.getElementById("phoneNumber").value = data.phoneNumber;
     if(data.quoteDate) document.getElementById("quoteDate").textContent = data.quoteDate;
 
     invBody.innerHTML = ""; // clear the sample row
+    let currentGroupId = null;
     data.items.forEach(item=>{
       if(item.group){
-        newGroupRow(item.title);
+        const { groupId } = newGroupRow(item.title);
+        currentGroupId = groupId;
       } else {
-        newRow(item.title, item.price, item.qty);
+        const tr = newRow(item.title, item.price, item.qty);
+        if(currentGroupId){
+          tr.classList.add("detail-row");
+          tr.dataset.groupId = currentGroupId;
+          tr.style.display = "none"; // collapsed by default under its system
+        }
       }
     });
   }
