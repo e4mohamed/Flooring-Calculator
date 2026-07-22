@@ -107,7 +107,7 @@
 <script type="module">
 import { db, PRODUCTS_DOC_PATH } from "./firebase-config.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { rawProducts, auxMaterials, mixtures, applyProductsData, getPrice, getSelectableItems } from "./defaults.js";
+import { rawProducts, auxMaterials, mixtures, applyProductsData, getPrice, getName, getSelectableItems } from "./defaults.js";
 
 // ---------------------------------------------------------------------
 // Systems (mirrors the Systems Calculator sheet) — references live data from Firestore
@@ -312,6 +312,9 @@ function recalcSystem(sys){
     row.querySelector(".qty-cell").textContent = fmt(qty);
     row.querySelector(".price-cell").textContent = fmt(price);
     row.querySelector(".cost-cell").textContent = fmt(cost);
+    step._price = price;
+    step._qty = qty;
+    step._cost = cost;
   });
   card.querySelector(".band-qty b").textContent = fmt(totalQty);
   card.querySelector(".band-cost b").textContent = fmt(totalCost);
@@ -358,11 +361,19 @@ document.getElementById("generateQuoteBtn").addEventListener("click", ()=>{
   const chosen = selectedSystems();
   if(chosen.length === 0) return;
 
-  const items = chosen.map(sys=>{
-    const qty = sys._preciseQty || 0;
-    const totalCost = sys._preciseCost || 0;
-    const price = qty ? totalCost/qty : 0;
-    return { title: sys.title, price, qty: Math.round(qty*100)/100, total: totalCost };
+  const items = [];
+  chosen.forEach(sys=>{
+    items.push({ group: true, title: sys.title });
+    sys.steps.forEach(step=>{
+      const itemName = step.key ? getName(step.key) : "لا يوجد";
+      items.push({
+        group: false,
+        title: `${step.desc}: ${itemName}`,
+        price: step._price || 0,
+        qty: Math.round((step._qty || 0) * 100) / 100,
+        total: step._cost || 0,
+      });
+    });
   });
 
   const data = {
