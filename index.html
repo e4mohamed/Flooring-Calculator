@@ -14,6 +14,25 @@
     padding:6px 14px; border-radius:20px; white-space:nowrap;
   }
   .nav-link:hover{background:#eaf7fb;}
+  .quote-check{
+    display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700;
+    background:rgba(255,255,255,.55); border-radius:14px; padding:3px 10px; margin-inline-end:10px;
+    cursor:pointer; user-select:none;
+  }
+  .quote-check input{cursor:pointer; margin:0;}
+  .quote-bar{
+    position:sticky; bottom:0; z-index:20; display:flex; align-items:center; justify-content:space-between;
+    gap:14px; background:#fff; border:1.5px solid var(--brand); border-radius:12px;
+    padding:12px 18px; margin:24px auto 0; max-width:860px; box-shadow:0 4px 18px rgba(20,40,60,.12);
+    flex-wrap:wrap;
+  }
+  .quote-bar span{font-size:13px; font-weight:700; color:var(--ink);}
+  .quote-bar button{
+    font-family:'Cairo',sans-serif; font-weight:700; font-size:13px; cursor:pointer;
+    border:none; border-radius:8px; padding:9px 20px; color:#fff; background:var(--brand);
+  }
+  .quote-bar button:hover{background:var(--brand-dark);}
+  .quote-bar button:disabled{background:#b8c4cc; cursor:not-allowed;}
 </style>
 </head>
 <body>
@@ -74,6 +93,11 @@
       <span class="toggle-arrow section-arrow">▾</span>
     </div>
     <div class="systems-grid" id="outdoorGrid"></div>
+  </div>
+
+  <div class="quote-bar">
+    <span id="quoteSelCount">لم يتم اختيار أي نظام بعد — ضع علامة "أضف للعرض" على الأنظمة المطلوبة</span>
+    <button id="generateQuoteBtn" disabled>📄 إنشاء عرض سعر للأنظمة المختارة</button>
   </div>
 
 </div>
@@ -183,10 +207,21 @@ function renderSystemGroup(list, container){
         <span class="band-rate">تكلفة المتر: <b>0</b> جنيه/م²</span>
       </div>
       <div class="band-name-group">
+        <label class="quote-check" title="إضافة هذا النظام إلى عرض السعر">
+          <input type="checkbox" class="quote-select-input">
+          <span>أضف للعرض</span>
+        </label>
         <span class="band-name">${sys.title}</span>
         <span class="band-arrow">▾</span>
       </div>`;
     band.addEventListener("click", ()=> card.classList.toggle("collapsed"));
+    band.querySelector(".quote-check").addEventListener("click", e=>{
+      e.stopPropagation(); // don't collapse/expand the card
+    });
+    band.querySelector(".quote-select-input").addEventListener("change", e=>{
+      sys.selectedForQuote = e.target.checked;
+      updateQuoteBar();
+    });
     card.appendChild(band);
 
     const body = document.createElement("div");
@@ -282,6 +317,8 @@ function recalcSystem(sys){
   card.querySelector(".band-cost b").textContent = fmt(totalCost);
   const ratePerM2 = area ? totalCost/area : 0;
   card.querySelector(".band-rate b").textContent = fmt(ratePerM2);
+  sys._preciseQty = totalQty;
+  sys._preciseCost = totalCost;
 }
 
 function recalcAll(){
@@ -289,6 +326,61 @@ function recalcAll(){
 }
 
 document.getElementById("areaInput").addEventListener("input", recalcAll);
+
+// ---------------------------------------------------------------------
+// Quotation generation: send selected systems + project info to quotation.html
+// ---------------------------------------------------------------------
+function selectedSystems(){
+  return allSystems.filter(sys=>sys.selectedForQuote);
+}
+
+function updateQuoteBar(){
+  const count = selectedSystems().length;
+  const label = document.getElementById("quoteSelCount");
+  const btn = document.getElementById("generateQuoteBtn");
+  if(count === 0){
+    label.textContent = 'لم يتم اختيار أي نظام بعد — ضع علامة "أضف للعرض" على الأنظمة المطلوبة';
+    btn.disabled = true;
+  } else {
+    label.textContent = `تم اختيار ${count} نظام${count>1 ? "ات" : ""} لعرض السعر`;
+    btn.disabled = false;
+  }
+}
+
+function formatQuoteDate(isoStr){
+  if(!isoStr) return "";
+  const [y,m,d] = isoStr.split("-");
+  if(!y||!m||!d) return isoStr;
+  return `${d} / ${m} / ${y}`;
+}
+
+document.getElementById("generateQuoteBtn").addEventListener("click", ()=>{
+  const chosen = selectedSystems();
+  if(chosen.length === 0) return;
+
+  const items = chosen.map(sys=>{
+    const qty = sys._preciseQty || 0;
+    const totalCost = sys._preciseCost || 0;
+    const price = qty ? totalCost/qty : 0;
+    return { title: sys.title, price, qty: Math.round(qty*100)/100, total: totalCost };
+  });
+
+  const data = {
+    projectName: document.getElementById("projectName").value || "",
+    projectAddress: document.getElementById("projectAddress").value || "",
+    phoneNumber: document.getElementById("phoneNumber").value || "",
+    quoteDate: formatQuoteDate(document.getElementById("projectDate").value),
+    items,
+  };
+
+  try{
+    sessionStorage.setItem("stacQuotationData", JSON.stringify(data));
+  }catch(err){
+    alert("تعذر تجهيز بيانات عرض السعر: " + err.message);
+    return;
+  }
+  window.open("quotation.html", "_blank");
+});
 
 // default the date field to today, still editable
 (function(){
