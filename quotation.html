@@ -47,6 +47,11 @@
   }
   table.inventory tbody td{padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:top;}
   table.inventory tbody tr:hover{background:#fbfdfe;}
+  table.inventory tr.group-row td{
+    background:var(--brand-bg); color:var(--brand); font-weight:800; font-size:13.5px;
+    border-bottom:1.5px solid var(--brand); padding-top:10px; padding-bottom:8px;
+  }
+  table.inventory tr.group-row + tr td{padding-top:9px;}
   table.inventory span[contenteditable]{display:inline-block; min-width:20px;}
   table.inventory span[contenteditable]:focus{outline:1.5px dashed var(--brand); border-radius:3px; background:#fff;}
   a.cut{
@@ -186,6 +191,7 @@
   }
 
   function recalcRow(tr){
+    if(tr.classList.contains("group-row")) return;
     const price = parseFloat(tr.querySelector(".price-cell").textContent) || 0;
     const qty = parseFloat(tr.querySelector(".qty-cell").textContent) || 0;
     tr.querySelector(".row-total").textContent = fmt(price * qty);
@@ -194,6 +200,7 @@
   function recalcAll(){
     let subtotal = 0;
     invBody.querySelectorAll("tr").forEach(tr=>{
+      if(tr.classList.contains("group-row")) return;
       recalcRow(tr);
       subtotal += parseFloat(tr.querySelector(".row-total").textContent) || 0;
     });
@@ -213,6 +220,14 @@
       <td><span class="curval" data-prefix="">${currentPrefix()}</span> <span contenteditable="true" class="price-cell">${p}</span></td>
       <td><span contenteditable="true" class="qty-cell">${q}</span></td>
       <td><span class="curval" data-prefix="">${currentPrefix()}</span> <span class="row-total">0.00</span></td>`;
+    invBody.appendChild(tr);
+    return tr;
+  }
+
+  function newGroupRow(title){
+    const tr = document.createElement("tr");
+    tr.className = "group-row";
+    tr.innerHTML = `<td colspan="4"><a class="cut" title="حذف النظام بالكامل">-</a><span contenteditable="true">${title || "نظام"}</span></td>`;
     invBody.appendChild(tr);
     return tr;
   }
@@ -273,7 +288,11 @@
 
     invBody.innerHTML = ""; // clear the sample row
     data.items.forEach(item=>{
-      newRow(item.title, item.price, item.qty);
+      if(item.group){
+        newGroupRow(item.title);
+      } else {
+        newRow(item.title, item.price, item.qty);
+      }
     });
   }
 
