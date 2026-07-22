@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>حاسبة الكميات والتكلفة - دهانات الأرضيات | STAC</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0298cd">
+<link rel="icon" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="STAC Calc">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -15,24 +22,26 @@
   }
   .nav-link:hover{background:#eaf7fb;}
   .quote-check{
-    display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700;
-    background:rgba(255,255,255,.55); border-radius:14px; padding:3px 10px; margin-inline-end:10px;
-    cursor:pointer; user-select:none;
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+    background:rgba(255,255,255,.6); border:1.5px solid rgba(0,0,0,.08); border-radius:16px;
+    padding:5px 12px; cursor:pointer; user-select:none; transition:background .15s ease, color .15s ease;
   }
-  .quote-check input{cursor:pointer; margin:0;}
+  .quote-check input{cursor:pointer; margin:0; width:15px; height:15px;}
+  .quote-check.is-checked{background:#122733; color:#fff; border-color:#122733;}
   .quote-bar{
     position:sticky; bottom:0; z-index:20; display:flex; align-items:center; justify-content:space-between;
-    gap:14px; background:#fff; border:1.5px solid var(--brand); border-radius:12px;
-    padding:12px 18px; margin:24px auto 0; max-width:860px; box-shadow:0 4px 18px rgba(20,40,60,.12);
+    gap:16px; background:#fff; border:2px solid var(--brand); border-radius:14px;
+    padding:16px 22px; margin:28px auto 0; max-width:900px; box-shadow:0 6px 22px rgba(20,40,60,.15);
     flex-wrap:wrap;
   }
-  .quote-bar span{font-size:13px; font-weight:700; color:var(--ink);}
+  .quote-bar span{font-size:14px; font-weight:700; color:var(--ink);}
   .quote-bar button{
-    font-family:'Cairo',sans-serif; font-weight:700; font-size:13px; cursor:pointer;
-    border:none; border-radius:8px; padding:9px 20px; color:#fff; background:var(--brand);
+    font-family:'Cairo',sans-serif; font-weight:800; font-size:14.5px; cursor:pointer;
+    border:none; border-radius:10px; padding:12px 26px; color:#fff; background:var(--brand);
+    box-shadow:0 2px 8px rgba(2,152,205,.35);
   }
-  .quote-bar button:hover{background:var(--brand-dark);}
-  .quote-bar button:disabled{background:#b8c4cc; cursor:not-allowed;}
+  .quote-bar button:hover:not(:disabled){background:var(--brand-dark);}
+  .quote-bar button:disabled{background:#b8c4cc; cursor:not-allowed; box-shadow:none;}
 </style>
 </head>
 <body>
@@ -44,6 +53,7 @@
     <p>إيبوكسي وبولي يوريثان - Stafloor Product Line</p>
   </div>
   <a class="nav-link" href="products.html">📋 كشف المنتجات والأسعار (الأدمن)</a>
+  <button class="nav-link" id="installAppBtn" style="display:none; cursor:pointer; background:var(--brand); color:#fff; border-color:var(--brand);">⬇ تثبيت التطبيق</button>
 </header>
 
 <div class="wrap">
@@ -99,6 +109,7 @@
     <span id="quoteSelCount">لم يتم اختيار أي نظام بعد — ضع علامة "أضف للعرض" على الأنظمة المطلوبة</span>
     <button id="generateQuoteBtn" disabled>📄 إنشاء عرض سعر للأنظمة المختارة</button>
   </div>
+  <p id="quoteSaveStatus" style="font-size:11.5px; color:var(--ink-soft); text-align:center; margin:8px 2px 0;"></p>
 
 </div>
 
@@ -106,7 +117,7 @@
 
 <script type="module">
 import { db, PRODUCTS_DOC_PATH } from "./firebase-config.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { rawProducts, auxMaterials, mixtures, applyProductsData, getPrice, getName, getSelectableItems } from "./defaults.js";
 
 // ---------------------------------------------------------------------
@@ -220,6 +231,7 @@ function renderSystemGroup(list, container){
     });
     band.querySelector(".quote-select-input").addEventListener("change", e=>{
       sys.selectedForQuote = e.target.checked;
+      e.target.closest(".quote-check").classList.toggle("is-checked", e.target.checked);
       updateQuoteBar();
     });
     card.appendChild(band);
@@ -392,6 +404,18 @@ document.getElementById("generateQuoteBtn").addEventListener("click", ()=>{
     return;
   }
   window.open("quotation.html", "_blank");
+
+  // save a copy in Firestore for record-keeping (fire-and-forget, doesn't block opening the quote)
+  const saveStatus = document.getElementById("quoteSaveStatus");
+  if(saveStatus) saveStatus.textContent = "💾 جارٍ حفظ نسخة من العرض في قاعدة البيانات...";
+  addDoc(collection(db, "quotations"), { ...data, createdAt: serverTimestamp() })
+    .then(()=>{
+      if(saveStatus) saveStatus.textContent = "✓ تم حفظ نسخة من هذا العرض في قاعدة البيانات";
+    })
+    .catch(err=>{
+      console.error("تعذر حفظ نسخة من عرض السعر في قاعدة البيانات:", err);
+      if(saveStatus) saveStatus.textContent = "⚠ تعذر حفظ نسخة من العرض في قاعدة البيانات (تم فتح العرض على أي حال)";
+    });
 });
 
 // default the date field to today, still editable
@@ -426,6 +450,38 @@ document.getElementById("outdoorToggle").addEventListener("click", ()=>{
   renderSystems();
   recalcAll();
 })();
+
+// ---------------------------------------------------------------------
+// PWA: service worker registration + custom "install app" button
+// ---------------------------------------------------------------------
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+  });
+}
+
+let deferredInstallPrompt = null;
+const installBtn = document.getElementById("installAppBtn");
+
+window.addEventListener("beforeinstallprompt", e=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  if(installBtn) installBtn.style.display = "inline-block";
+});
+
+if(installBtn){
+  installBtn.addEventListener("click", async ()=>{
+    if(!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    installBtn.style.display = "none";
+  });
+}
+
+window.addEventListener("appinstalled", ()=>{
+  if(installBtn) installBtn.style.display = "none";
+});
 </script>
 </body>
 </html>
