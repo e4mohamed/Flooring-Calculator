@@ -28,3 +28,6 @@ export const PRODUCTS_DOC_PATH = ["app_data", "products"];
 // where saved quotations live, and the counter used to hand out serial numbers
 export const QUOTATIONS_COLLECTION = "quotations";
 export const QUOTATION_COUNTER_DOC_PATH = ["app_data", "quotationCounter"];
+
+// company branding (name, address, logo) shown across every page and print report
+export const COMPANY_INFO_DOC_PATH = ["app_data", "companyInfo"];
