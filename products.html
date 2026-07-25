@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>كشف المنتجات والأسعار | STAC</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0298cd">
+<link rel="icon" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -77,6 +82,7 @@
     <p>صفحة الأدمن لتعديل بيانات المنتجات — التعديلات تنعكس تلقائيًا على حاسبة العرض</p>
   </div>
   <a class="nav-link" href="index.html">↩ الذهاب إلى حاسبة العرض</a>
+  <a class="nav-link" href="admin-quotations.html">🧾 عروض الأسعار المحفوظة</a>
 </header>
 
 <div class="wrap">
@@ -414,6 +420,12 @@ document.getElementById("loginBtn").addEventListener("click", async ()=>{
 document.getElementById("signoutBtn").addEventListener("click", ()=>{
   signOut(auth);
 });
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
