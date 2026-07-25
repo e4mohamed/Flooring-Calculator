@@ -67,6 +67,10 @@
   .info-grid .field{flex-direction:row; align-items:center; gap:10px;}
   .info-grid .field label{flex:0 0 128px; white-space:nowrap;}
   .info-grid .field input{flex:1; min-width:0;}
+  @media(max-width:600px){
+    .info-grid .field{flex-direction:column; align-items:stretch; gap:4px;}
+    .info-grid .field label{flex:none; white-space:normal;}
+  }
   .section-wrap{margin-top:22px;}
   .section-title{
     font-size:15px; font-weight:800; color:#fff; margin:0;
